@@ -136,7 +136,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
                         deep_ep_ll_output->packed_recv_count,
                         std::nullopt,
                         std::nullopt);
-        syncAndCheck();
+        // syncAndCheck();
         // LOG_INFO("======= deepEpLLMoeFfn silu and mul start ========");
 
         // 2. activation: silu and mul
@@ -144,7 +144,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
             {DataType::TYPE_BF16, {num_experts_per_rank, num_token, inter_dim}}, {"fc1_activation"});
         torch::Tensor fc1_activation_tensor = Buffer2torchTensor(fc1_activation, false);
         aiter::silu_and_mul(fc1_activation_tensor, fc1_result_tensor);
-        syncAndCheck();
+        // syncAndCheck();
 
         // 3. second gemm
         // LOG_INFO("======= deepEpLLMoeFfn second gemm start ========");
@@ -155,7 +155,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
                         deep_ep_ll_output->packed_recv_count,
                         std::nullopt,
                         std::nullopt);
-        syncAndCheck();
+        // syncAndCheck();
         
         // LOG_INFO("++++++++++++ deepEpLLMoeFfn fp16 success +++++++++++");
     } else if (params.qscheme == QScheme::Qfp8PerToken) {   // fp8 input
@@ -174,7 +174,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
                          scale_tensor,                       // [30, 256, 1]
                          w1_scale_tensor);                   // [30, 2816, 1]
         // printMyBufferData_(*fc1_result, "fc1_result", false);
-        syncAndCheck();
+        // syncAndCheck();
 
         //LOG_INFO("======= activation start ========");
         BufferPtr fc1_activation = allocateBuffer(
@@ -182,7 +182,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
         
         torch::Tensor fc1_activation_tensor = Buffer2torchTensor(fc1_activation, false);
         aiter::silu_and_mul(fc1_activation_tensor, fc1_result_tensor);
-        syncAndCheck();
+        // syncAndCheck();
 
         // activation quantization
         //LOG_INFO("======= activation quant start ========");
@@ -199,7 +199,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
                         deep_ep_ll_output->packed_recv_count,
                         fc1_act_scale_tensor,
                         w2_scale_tensor);
-        syncAndCheck();
+        // syncAndCheck();
         
         // LOG_INFO("++++++++++++ deepEpLLMoeFfn fp8 success +++++++++++");
     }
