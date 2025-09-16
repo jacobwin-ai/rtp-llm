@@ -1,0 +1,80 @@
+--- /dev/null
++++ csrc/ck_m_grouped_gemm/include/m_grouped_gemm_utils.h
+@@ -0,0 +1,12 @@
++#include "flatmm_basic.hpp"
++#include "py_itfs_common.h"
++
++template <class scaleM = ck_tile::FlatmmScalePointer<-1>,
++          class scaleN = ck_tile::FlatmmScalePointer<-1>>
++using m_grouped_flatmm_args = ck_tile::MaskedGroupedFlatmmHostArgs<scaleM, scaleN>;
++using ck_stream_config      = ck_tile::stream_config;
++using row_major             = ck_tile::tensor_layout::gemm::RowMajor;
++using col_major             = ck_tile::tensor_layout::gemm::ColumnMajor;
++using bf16                  = ck_tile::bf16_t;
++using fp16                  = ck_tile::half_t;
++using fp8                   = ck_tile::fp8_t;
+
+--- csrc/ck_m_grouped_gemm/include/m_grouped_gemm.h
++++ csrc/ck_m_grouped_gemm/include/m_grouped_gemm.h
+@@ -1,23 +1,10 @@
+ #pragma once
+ // SPDX-License-Identifier: MIT
+ // Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
+-#include "flatmm_basic.hpp"
+-#include "py_itfs_common.h"
+-#include <ATen/cuda/CUDAContext.h>
+-#include <c10/cuda/CUDAGuard.h>
+ #include <hip/hip_runtime.h>
+ #include <torch/all.h>
+ #include <torch/extension.h>
+ 
+-template <class scaleM = ck_tile::FlatmmScalePointer<-1>,
+-          class scaleN = ck_tile::FlatmmScalePointer<-1>>
+-using m_grouped_flatmm_args = ck_tile::MaskedGroupedFlatmmHostArgs<scaleM, scaleN>;
+-using ck_stream_config      = ck_tile::stream_config;
+-using row_major             = ck_tile::tensor_layout::gemm::RowMajor;
+-using col_major             = ck_tile::tensor_layout::gemm::ColumnMajor;
+-using bf16                  = ck_tile::bf16_t;
+-using fp16                  = ck_tile::half_t;
+-using fp8                   = ck_tile::fp8_t;
+ 
+ __attribute__((visibility("default"))) torch::Tensor
+ m_grouped_gemm(torch::Tensor& XQ,
+
+
+--- csrc/ck_m_grouped_gemm/include/m_grouped_gemm_common.cuh
++++ csrc/ck_m_grouped_gemm/include/m_grouped_gemm_common.cuh
+@@ -9,6 +9,7 @@
+ #include "ck_tile/ops/flatmm.hpp"
+ #include "ck_tile/ops/gemm.hpp"
+ #include "m_grouped_gemm.h"
++#include "m_grouped_gemm_utils.h"
+ #include <ATen/ATen.h>
+ #include <hip/hip_runtime.h>
+ #include <string>
+ 
+
+--- csrc/pybind/m_grouped_gemm_pybind.cu
++++ csrc/pybind/m_grouped_gemm_pybind.cu
+@@ -2,6 +2,8 @@
+ // Copyright (C) 2024-2025, Advanced Micro Devices, Inc. All rights reserved.
+ #include "rocm_ops.hpp"
+ #include "m_grouped_gemm.h"
++#include "m_grouped_gemm_utils.h"
++
+ 
+ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
+ {
+
+--- csrc/rocm_ops.cpp
++++ csrc/rocm_ops.cpp
+@@ -23,6 +23,7 @@
+ #include "gemm_a8w8_bpreshuffle.h"
+ #include "hipbsolgemm.cuh"
+ #include "m_grouped_gemm.h"
++#include "m_grouped_gemm_utils.h"
+ #include "moe_ck.h"
+ #include "moe_op.h"
+ #include "moe_sorting.h"
+
+
