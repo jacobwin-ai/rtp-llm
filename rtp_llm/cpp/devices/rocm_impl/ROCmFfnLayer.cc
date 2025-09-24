@@ -323,6 +323,23 @@ MoeGateSelectOutput ROCmDevice::moeGateSelect(const FfnLayerParams& params) {
 
         moe_gating = std::move(logits);
     }
+    if (init_params_.moe_config.fake_balance_expert) {
+        if (topk_ids->type() == DataType::TYPE_INT64) {
+            fake_balance_expert(topk_ids->data<int64_t>(),
+                                topk_weights->data<float>(),
+                                init_params_.dp_rank,
+                                num_expert,
+                                num_token * topk,
+                                stream_);
+        } else {
+            fake_balance_expert(topk_ids->data<int>(),
+                                topk_weights->data<float>(),
+                                init_params_.dp_rank,
+                                num_expert,
+                                num_token * topk,
+                                stream_);
+        }
+    }
     // printMyBufferData_(*topk_ids, "topk_ids", true);
     // printMyBufferData_(*topk_weights, "topk_weights", true);
     return {topk_ids, topk_weights, moe_gating};
