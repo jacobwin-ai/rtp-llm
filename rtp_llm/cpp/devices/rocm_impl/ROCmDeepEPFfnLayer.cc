@@ -9,7 +9,6 @@
 #include "rtp_llm/cpp/core/Dispatch.h"
 #include "rtp_llm/cpp/devices/myLogger.h"
 
-
 #include "quant.h"
 
 using namespace std;
@@ -24,9 +23,9 @@ bool ROCmDevice::initDeepEPBuffer() {
     size_t world_size  = nccl_param.world_size_;
     int    num_experts = init_params_.num_experts + init_params_.extra_experts;
 
-    // LOG_INFO("======= world_rank: ", world_rank, ", world_size: ", world_size, 
+    // LOG_INFO("======= world_rank: ", world_rank, ", world_size: ", world_size,
     //     ", num_experts:", num_experts);
-    // LOG_INFO("========= init_params_.use_deepep_moe: ", 
+    // LOG_INFO("========= init_params_.use_deepep_moe: ",
     //     init_params_.use_deepep_moe, " init_params_.use_deepep_low_latency: ",
     //     init_params_.use_deepep_low_latency, " init_params_.use_deepep_internode:",
     //     init_params_.use_deepep_internode);
@@ -40,7 +39,8 @@ bool ROCmDevice::initDeepEPBuffer() {
         num_rdma_bytes = DeepEPBuffer::getLowLatencyRdmaSizeHint(
             ll_num_max_token_per_rank, init_params_.hidden_size, world_size, num_experts);
         num_qps_per_rank = num_experts / init_params_.ep_size;
-        // LOG_INFO("======= ll_num_max_token_per_rank: ", ll_num_max_token_per_rank, ", hidden_size: ", init_params_.hidden_size, 
+        // LOG_INFO("======= ll_num_max_token_per_rank: ", ll_num_max_token_per_rank, ", hidden_size: ",
+        // init_params_.hidden_size,
         //  ", num_qps_per_rank:", num_qps_per_rank);
     } else if (init_params_.use_deepep_internode) {  // normal-kernel internode
         num_rdma_bytes   = int(1e9);
@@ -52,9 +52,9 @@ bool ROCmDevice::initDeepEPBuffer() {
 
     try {
         RTP_LLM_LOG_INFO("deep ep init with num_rdma_bytes %ld, world_rank %ld, world_size %ld",
-                    num_rdma_bytes,
-                    world_rank,
-                    world_size);
+                         num_rdma_bytes,
+                         world_rank,
+                         world_size);
 #if USE_ACCL_EP
         num_qps_per_rank = num_experts / init_params_.ep_size;
         // LOG_INFO("======== use accl ep");
@@ -67,7 +67,7 @@ bool ROCmDevice::initDeepEPBuffer() {
                                               num_qps_per_rank));
 #else
         // LOG_INFO("======== no use accl ep");
-        int64_t num_nvl_bytes  = init_params_.use_deepep_low_latency ? 0 : 1e9;
+        int64_t num_nvl_bytes = init_params_.use_deepep_low_latency ? 0 : 1e9;
         deepep_buffer_.reset(new DeepEPBuffer(this,
                                               world_rank,
                                               world_size,
@@ -132,20 +132,23 @@ MoeDispatchOutput ROCmDevice::deepEpDispatch(const MoeDispatchParams& params) {
                           "hidden must be bf16 in deepEpDispatch, actual: %d",
                           int(hidden->type()));
     BufferPtr                    quantized_hidden;
+    QBufferPtr                   q_hidden;
     torch::Tensor                x;
     std::optional<torch::Tensor> x_scales;
-    BufferPtr hidden_quant, hidden_quant_scale;
+    BufferPtr                    hidden_quant, hidden_quant_scale;
     if (params.qscheme == QScheme::Qfp8PerTokenBlock) {
-        const size_t model_dim = hidden->shape()[1];
-        const int block_scale_k = 128;
+        const size_t  model_dim     = hidden->shape()[1];
+        const int     block_scale_k = 128;
         torch::Tensor hidden_tensor = Buffer2torchTensor(hidden, false);
         hidden_quant = allocateBuffer({DataType::TYPE_FP8_E4M3, {token_num, model_dim}}, {"rocm_hidden_quant"});
-        hidden_quant_scale = allocateBuffer({DataType::TYPE_FP32, {token_num, model_dim / block_scale_k}}, {"rocm_hidden_quant_scale"});
-        x = Buffer2torchTensor(*hidden_quant, false);
-        x_scales = Buffer2torchTensor(*hidden_quant_scale, false);
+        hidden_quant_scale =
+            allocateBuffer({DataType::TYPE_FP32, {token_num, model_dim / block_scale_k}}, {"rocm_hidden_quant_scale"});
+        x = Buffer2torchTensorWithDstType(*hidden_quant, false, dataTypeToTorchType(hidden_quant->type()));
+        x_scales =
+            Buffer2torchTensorWithDstType(*hidden_quant_scale, false, dataTypeToTorchType(hidden_quant_scale->type()));
 
         hidden_tensor = hidden_tensor.view({(int)token_num, (int)model_dim / block_scale_k, block_scale_k});
-        x = x.view({(int)token_num, (int)model_dim / block_scale_k, block_scale_k});
+        x             = x.view({(int)token_num, (int)model_dim / block_scale_k, block_scale_k});
 
         // invoke aiter quant kernel
         aiter::dynamic_per_token_scaled_quant(
@@ -153,8 +156,15 @@ MoeDispatchOutput ROCmDevice::deepEpDispatch(const MoeDispatchParams& params) {
             /*input=*/hidden_tensor,
             /*scales=*/x_scales.value(),
             /*scale_ub=*/nullopt);
+    } else if (params.qscheme == QScheme::Qfp8PerToken) {
+        q_hidden = std::dynamic_pointer_cast<QBuffer>(
+            quantize(QuantizeParams(*hidden, DataType::TYPE_QFP8_E4M3, 1, params.qscheme, 128, 0)));
+        x = Buffer2torchTensorWithDstType(q_hidden->kernel(), false, dataTypeToTorchType(q_hidden->kernel().type()));
+        x_scales =
+            Buffer2torchTensorWithDstType(q_hidden->scales(), false, dataTypeToTorchType(q_hidden->scales().type()));
     } else {
-        x = Buffer2torchTensor(hidden, false);  // [num_tokens, hidden_size]
+        x = Buffer2torchTensorWithDstType(
+            hidden, false, dataTypeToTorchType(hidden->type()));  // [num_tokens, hidden_size]
     }
     // printMyBufferData_(*hidden_quant, "hidden_quant", false);
     // printMyBufferData_(*hidden_quant_scale, "hidden_quant_scale", false);
@@ -222,7 +232,7 @@ MoeDispatchOutput ROCmDevice::deepEpDispatch(const MoeDispatchParams& params) {
         BufferPtr recv_topk_idx_buffer     = torchTensor2Buffer(dispatch_output.recv_topk_idx.value());
         BufferPtr recv_topk_weights_buffer = torchTensor2Buffer(dispatch_output.recv_topk_weights.value());
         BufferPtr recv_x_buffer;
-        if (params.qscheme == QScheme::Qfp8PerTokenBlock) {
+        if (params.qscheme == QScheme::Qfp8PerTokenBlock || params.qscheme == QScheme::Qfp8PerToken) {
             recv_x_buffer.reset(new QBuffer(
                 std::move(torchTensor2Buffer(dispatch_output.recv_x)),
                 std::move(torchTensor2Buffer(dispatch_output.recv_x_scales.value())),
@@ -266,7 +276,7 @@ MoeCombineOutput ROCmDevice::deepEpCombine(const MoeCombineParams& params) {
     auto  combine_config  = deepep_buffer_->getCombineConfig();
     auto& dispatch_output = params.deep_ep_output;
 
-    auto compute_event  = deepep_buffer_->capture();
+    auto compute_event = deepep_buffer_->capture();
     // LOG_INFO("======== deepep buffer combine start ========");
     auto combine_output = deepep_buffer_->combine(input_tensor,
                                                   dispatch_output->handle.value(),
