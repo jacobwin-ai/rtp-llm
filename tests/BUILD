@@ -200,6 +200,7 @@ cc_library(
         "layernorm/fusedQkRmsNorm.cpp",
         "qhw_ffn/rocm_ffn_dispatch_test.cc",
         "qhw_ffn/rocm_ffn_moe_fp8_ll_test.cc",
+        "custom_ar/rocm_custom_ar_test.cc",
     ]),
     deps = torch_deps() + [
         "//rtp_llm/cpp/devices/rocm_impl:rocm_impl",
@@ -500,6 +501,27 @@ py_test(
     name = "rocm_pertensor_int8_gemm_op_test",
     srcs = [
         "gemm/rocm_pertensor_int8_gemm_op_test.py"
+    ],
+    data = [
+        "//:th_transformer",
+        ":rocm_test_ops",
+    ],
+    deps = [
+        "//rtp_llm:torch",
+        "//rtp_llm:rtp_llm_lib",
+    ],
+    env = {
+        "DEVICE_RESERVE_MEMORY_BYTES": "1024000",
+    },
+    tags = [
+        "rocm",
+    ],
+)
+
+py_test(
+    name = "rocm_custom_ar_test",
+    srcs = [
+         "custom_ar/rocm_custom_ar_test.py",
     ],
     data = [
         "//:th_transformer",
