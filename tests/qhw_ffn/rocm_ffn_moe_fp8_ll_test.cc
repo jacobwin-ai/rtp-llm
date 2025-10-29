@@ -11,10 +11,10 @@ using namespace rtp_llm;
 
 namespace unittest {
 
-class ROCmFfnMoeFp8PTPCOp : public torch::jit::CustomClassHolder {
+class ROCmFfnMoeFp8Test : public torch::jit::CustomClassHolder {
 
 public:
-    ROCmFfnMoeFp8PTPCOp(int64_t ep_rank, int64_t ep_size);
+    ROCmFfnMoeFp8Test(int64_t ep_rank, int64_t ep_size);
 
     void forward(torch::Tensor input,
                  torch::Tensor w1,
@@ -34,29 +34,32 @@ private:
 };
 
 
-ROCmFfnMoeFp8PTPCOp::ROCmFfnMoeFp8PTPCOp(int64_t ep_rank, int64_t ep_size) {
+ROCmFfnMoeFp8Test::ROCmFfnMoeFp8Test(int64_t ep_rank, int64_t ep_size) {
     // TODO: add ep parameters here
     params_ = GptInitParameter();
     params_.dp_size_ = ep_size;
     params_.dp_rank_ = ep_rank;
     params_.ep_size_ = ep_size;
     params_.ep_rank_ = ep_rank;
-    params_.nccl_ip_ = "11.129.76.156";
+    params_.nccl_ip_ = "localhost";
     params_.dp_tp_nccl_port_ = 50049;
-    params_.expert_num_ = 60;                 // deepep初始化参数
-    params_.phy_exp_num_ = 60;                // deepep初始化参数
-    params_.max_generate_batch_size_ = 128;   // deepep初始化参数：并发数
+
+    params_.expert_num_ = 128;
+    params_.phy_exp_num_ = 128;
+    params_.max_generate_batch_size_ = 128;
+
     params_.moe_config.use_deepep_moe = true;
-    params_.moe_config.use_deepep_low_latency = false;
-    params_.moe_config.use_deepep_internode = false;
+    params_.moe_config.use_deepep_low_latency = true;
     params_.device_resource_config.enable_comm_overlap = false;
+    params_.hidden_size_ = 4096;
     params_.update_from_env_for_test();
+    
     DeviceFactory::initDevices(params_);
     device_ = DeviceFactory::getDefaultDevice();
 }
 
 
-void ROCmFfnMoeFp8PTPCOp::forward(torch::Tensor input,
+void ROCmFfnMoeFp8Test::forward(torch::Tensor input,
                               torch::Tensor w1,
                               torch::Tensor w2,
                               torch::Tensor fc1_scale,
@@ -114,7 +117,7 @@ void ROCmFfnMoeFp8PTPCOp::forward(torch::Tensor input,
     weights.moe_gating_weight = std::make_shared<const DenseWeights>(DenseWeights(gating_weight_buffer));
     weights.e_score_correction_bias = e_score_correction_bias_buffer;
 
-    FfnLayerParams ffn_layer_params(*input_buffer, ffn_configs, weights, std::nullopt, QScheme::Qfp8PerToken, DataType::TYPE_QFP8_E4M3);
+    FfnLayerParams ffn_layer_params(*input_buffer, ffn_configs, weights, std::nullopt, QScheme::Qfp8PerToken, DataType::TYPE_FP16);
 
     FfnLayerOutput ffn_output = device_->ffnLayer(ffn_layer_params);
 
@@ -125,6 +128,6 @@ void ROCmFfnMoeFp8PTPCOp::forward(torch::Tensor input,
 } // namespace unittest
 
 
-static auto ROCmFfnMoeFp8PTPCOp = torch::jit::class_<unittest::ROCmFfnMoeFp8PTPCOp>("unittest", "ROCmFfnMoeFp8PTPCOp")
+static auto ROCmFfnMoeFp8Test = torch::jit::class_<unittest::ROCmFfnMoeFp8Test>("unittest", "ROCmFfnMoeFp8Test")
     .def(torch::jit::init<int64_t, int64_t>())
-    .def("forward", &unittest::ROCmFfnMoeFp8PTPCOp::forward);
+    .def("forward", &unittest::ROCmFfnMoeFp8Test::forward);

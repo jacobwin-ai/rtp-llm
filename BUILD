@@ -47,6 +47,16 @@ config_setting(
     values = {"define": "using_aiter_src=true"},
 )
 
+# More specific: using ROCm with aiter_src (higher priority)
+# This resolves ambiguity when both --config=rocm and --config=aiter_src are used
+config_setting(
+    name = "using_rocm_with_aiter_src",
+    define_values = {
+        "using_rocm": "true",
+        "using_aiter_src": "true",
+    },
+)
+
 config_setting(
     name = "using_arm",
     values = {"define": "using_arm=true"},
