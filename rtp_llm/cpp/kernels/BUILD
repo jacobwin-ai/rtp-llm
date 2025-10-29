@@ -211,9 +211,11 @@ cc_library(
     name = "rocm_fused_qk_rmsnorm",
     srcs = [
         "rocm/fused_qk_rmsnorm.cu",
+        "rocm/experts_stats_kernels.cu",
     ],
     hdrs = [
         "rocm/fused_qk_rmsnorm.h",
+        "rocm/experts_stats_kernels.h",
     ],
     deps = rocm_deps + [
         "//rtp_llm/cpp/cuda:cuda_utils_cu",

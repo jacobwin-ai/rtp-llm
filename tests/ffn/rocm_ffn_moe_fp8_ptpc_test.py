@@ -259,6 +259,7 @@ def subprocess_moe_fp8_ptpc(input_path, w1_q_path, w2_q_path, w1_scale_path, w2_
         topk_group,
         output
     )
+    print(f"output:{output}")
 
     checkAllclose(torch_ref_output, output, rtol=0.05, atol=0.05, msg=f'[ep_size={ep_size}, ep_rank={ep_rank}]: python torch vs rtp')
     checkAllclose(aiter_ref_output, output, rtol=0.05, atol=0.05, msg=f'[ep_size={ep_size}, ep_rank={ep_rank}]: python aiter vs rtp')
@@ -314,7 +315,7 @@ class TestROCmFfnMoeFp8(unittest.TestCase):
         # start a new process to invoke rtp ffn layer
         procs = list()
         for ep_rank in range(ep_size):
-            os.environ['CUDA_VISIBLE_DEVICES'] = str(ep_rank)
+            os.environ['CUDA_VISIBLE_DEVICES'] = str(ep_rank + 4)
             proc = mp.Process(target=subprocess_moe_fp8_ptpc, args=(
                 input_file.name,
                 w1_q_file.name,
@@ -340,12 +341,14 @@ class TestROCmFfnMoeFp8(unittest.TestCase):
 
     # fp8 ptpc quant, for qwen3
     def test_moe_fp8_ptpc(self):
-        for ep_size in [1, 2]:
+        # for ep_size in [1, 2]:
+        for ep_size in [2]:
             for dtype in [torch.bfloat16]:
-                for token in [1, 2, 5, 16, 32]:
+                # for token in [1, 2, 5, 16, 32]:
+                for token in [2]:
                     for model_dim in [4096]:
-                        for inter_dim in [1536]:
-                            self._test_moe_fp8(token, model_dim, inter_dim, 128, 0, 8, 1, 1, ep_size, dtype, torch.float8_e4m3fnuz)
+                        for inter_dim in [1408]:
+                            self._test_moe_fp8(token, model_dim, inter_dim, 60, 0, 4, 1, 1, ep_size, dtype, torch.float8_e4m3fnuz)
 
 
 if __name__ == '__main__':

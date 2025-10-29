@@ -42,6 +42,7 @@ ROCmFfnMoeFp8Op::ROCmFfnMoeFp8Op(int64_t ep_rank, int64_t ep_size) {
     params_.ep_rank_         = ep_rank;
     params_.nccl_ip_         = "localhost";
     params_.dp_tp_nccl_port_ = 50049;
+
     DeviceFactory::initDevices(params_);
     device_ = DeviceFactory::getDefaultDevice();
 }
