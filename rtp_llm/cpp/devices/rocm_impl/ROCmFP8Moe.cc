@@ -5,6 +5,7 @@
 #include "rtp_llm/cpp/core/torch_utils/BufferTorchUtils.h"
 #include "rtp_llm/cpp/devices/utils/DevicePerfWrapper.h"
 #include "rtp_llm/cpp/kernels/activation_kernels.h"
+#include "rtp_llm/cpp/kernels/rocm/masked_silu_and_mul/mask_kernel.h"
 #include "rtp_llm/cpp/devices/myLogger.h"
 
 #include "csrc/ck_m_grouped_gemm/include/m_grouped_gemm.h"
@@ -185,21 +186,48 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
         // printMyBufferData_(*fc1_result, "fc1_result", false);
         // syncAndCheck();
 
-        //LOG_INFO("======= activation start ========");
-        BufferPtr fc1_activation = allocateBuffer(
-            {DataType::TYPE_BF16, {num_experts_per_rank, num_token, inter_dim}}, {"fc1_activation"});
-        
-        torch::Tensor fc1_activation_tensor = Buffer2torchTensor(fc1_activation, false);
-        aiter::silu_and_mul(fc1_activation_tensor, fc1_result_tensor);
-        // syncAndCheck();
-
-        // activation quantization
-        //LOG_INFO("======= activation quant start ========");
-        QBufferPtr q_fc1_activation;
+        // LOG_INFO("======= silu and mul start ========");  
         torch::Tensor fc1_act_tensor;
         torch::Tensor fc1_act_scale_tensor;
-        
-        quantize_3d(this, fc1_activation, q_fc1_activation, fc1_act_tensor, fc1_act_scale_tensor);
+        bool fuse_silu_and_mul = true;
+        if (fuse_silu_and_mul) {
+            BufferPtr fc1_activation = allocateBuffer(
+                {DataType::TYPE_FP8_E4M3, {num_experts_per_rank, num_token, inter_dim}}, {"fc1_activation"});
+            BufferPtr fc1_activation_scale = allocateBuffer(
+                {DataType::TYPE_FP32, {num_experts_per_rank, num_token, 1}}, {"fc1_activation_scale"});
+            launch_doActivationMaskedKernelHIP(static_cast<fp8_e4m3_t*>(fc1_activation->data()),                                       
+                                                static_cast<float*>(fc1_activation_scale->data()),
+                                                static_cast<const hip_bfloat16*>(fc1_result->data()),
+                                                num_experts_per_rank,
+                                                num_token,
+                                                inter_dim,
+                                                is_gated_activation,
+                                                static_cast<const int*>(masked_m->data()),
+                                                stream_);
+            // syncAndCheck();
+            fc1_act_tensor = Buffer2torchTensor(fc1_activation, false);
+            fc1_act_scale_tensor = Buffer2torchTensor(fc1_activation_scale, false);
+            // std::string filename = "/home/qinhanwen.qhw/codes/RTP-LLM/fused_fc1_act_scale_tensor_rank" + std::to_string(moe_conf.ep_rank) + ".pt";
+            // LOG_INFO("==============", filename);
+            // torch::save(fc1_act_scale_tensor, filename);
+            // LOG_INFO("======= fused silu and mul success =======");
+        } else {
+            BufferPtr fc1_activation = allocateBuffer(
+                {DataType::TYPE_BF16, {num_experts_per_rank, num_token, inter_dim}}, {"fc1_activation"});
+            torch::Tensor fc1_activation_tensor = Buffer2torchTensor(fc1_activation, false);
+            aiter::silu_and_mul(fc1_activation_tensor, fc1_result_tensor);
+            // syncAndCheck();
+
+            // activation quantization
+            //LOG_INFO("======= activation quant start ========");
+            QBufferPtr q_fc1_activation;
+            
+            quantize_3d(this, fc1_activation, q_fc1_activation, fc1_act_tensor, fc1_act_scale_tensor);
+            // std::string filename = "/home/qinhanwen.qhw/codes/RTP-LLM/fc1_act_scale_tensor_rank" + std::to_string(moe_conf.ep_rank) + ".pt";
+            // LOG_INFO("==============", filename);
+            // torch::save(fc1_act_scale_tensor, filename);
+        }
+
         //LOG_INFO("======= deepEpLLMoeFfn second gemm start ========");
         
         ::m_grouped_gemm(fc1_act_tensor,

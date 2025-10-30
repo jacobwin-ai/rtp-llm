@@ -212,8 +212,11 @@ cc_library(
     srcs = [
         "rocm/fused_qk_rmsnorm.cu",
         "rocm/experts_stats_kernels.cu",
+        "rocm/masked_silu_and_mul/mask_kernel.cu",
     ],
     hdrs = [
+        "rocm/masked_silu_and_mul/mask_kernel.h",
+        "rocm/masked_silu_and_mul/utils/array_utils.h",
         "rocm/fused_qk_rmsnorm.h",
         "rocm/experts_stats_kernels.h",
     ],
