@@ -26,10 +26,10 @@ cc_library(
         "@local_config_rocm//rocm:rocm_headers",
         "@local_config_rocm//rocm:hip",
         "//rtp_llm/cpp/rocm:rocm_types_hdr",
-        "//rtp_llm/cpp/rocm:rocm_utils",
+        "//rtp_llm/cpp/kernels:rocm_utils",
         "//rtp_llm/cpp/devices:devices_base",
         "//rtp_llm/cpp/devices:device_utils",
-        "//:th_utils",
+        "//rtp_llm/cpp/pybind:th_utils",
         "@nvshmem_rocm//:nvshmem_rocm_hdrs",
     ] + select({
         ":use_accl_ep": [

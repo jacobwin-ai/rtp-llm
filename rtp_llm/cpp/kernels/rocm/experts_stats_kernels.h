@@ -1,7 +1,7 @@
 #pragma once
 
 #if USING_ROCM
-#include "rtp_llm/cpp/rocm/hip_utils.h"
+#include "rtp_llm/cpp/rocm/hip_host_utils.h"
 #include "rtp_llm/cpp/rocm/cuda_shims.h"
 #else
 #include "rtp_llm/cpp/cuda/cuda_utils.h"

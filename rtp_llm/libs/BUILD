@@ -17,6 +17,9 @@ copy_files(
 filegroup(
     name = "copy_aiter",
     srcs = select({
+        # More specific condition (both rocm and aiter_src) has higher priority
+        # This must be first to resolve ambiguity when both configs are used
+        "@//:using_rocm_with_aiter_src": [":aiter_src_copy",],
         "@//:using_aiter_src": [":aiter_src_copy",],
         "//conditions:default": [":aiter_copy"],
     }),
