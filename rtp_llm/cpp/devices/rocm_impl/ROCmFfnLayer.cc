@@ -128,7 +128,7 @@ MoeDispatchOutput ROCmDevice::epDispatch(const MoeDispatchParams& params) {
             std::move(const_cast<BufferPtr&>(global_buffers[1])),
             std::move(BufferPtr(new Buffer(MemoryType::MEMORY_GPU, DataType::TYPE_INVALID, {0}, nullptr)))));
 
-        // updateExpertGpuLoads(moe_conf, params.expert_stats, global_buffers[2]);
+        updateExpertGpuLoads(moe_conf, params.expert_stats, global_buffers[2]);
 
         return {hidden_fp8,
                 global_buffers[2],
@@ -141,7 +141,7 @@ MoeDispatchOutput ROCmDevice::epDispatch(const MoeDispatchParams& params) {
                 all2all_output.output_to_split,
                 move(all2all_output.comm_barrier_hook)};
     } else {
-        // updateExpertGpuLoads(moe_conf, params.expert_stats, global_buffers[2]);
+        updateExpertGpuLoads(moe_conf, params.expert_stats, global_buffers[2]);
 
         return {global_buffers[0],
                 global_buffers[1],
@@ -340,8 +340,12 @@ MoeGateSelectOutput ROCmDevice::moeGateSelect(const FfnLayerParams& params) {
                                 stream_);
         }
     }
-    // printMyBufferData_(*topk_ids, "topk_ids", true);
-    // printMyBufferData_(*topk_weights, "topk_weights", true);
+
+    printBufferData(*topk_ids, "topk_ids");
+    printBufferData(*topk_weights, "topk_weights");
+
+    balanceExperts(topk_ids, params.expert_stats, params.configs.moe_configs.value(), params.weights);
+
     return {topk_ids, topk_weights, moe_gating};
 }
 
@@ -425,8 +429,8 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
     const size_t num_token           = hidden.shape()[0];
     const size_t model_dim           = hidden.shape()[1];
     const int    inter_dim           = static_cast<int>(params.weights.moe_down_weight->kernel->shape()[2]);
-    const size_t num_expert          = moe_conf.expert_num;
-    const size_t num_expert_per_rank = moe_conf.expert_num / moe_conf.ep_size;
+    const size_t num_expert          = moe_conf.expert_num + moe_conf.extra_expert_num;
+    const size_t num_expert_per_rank = num_expert / moe_conf.ep_size;
     const size_t topk                = moe_conf.top_k;
     DataType     dtype;
     if (params.qscheme == QScheme::NoQuantize) {
