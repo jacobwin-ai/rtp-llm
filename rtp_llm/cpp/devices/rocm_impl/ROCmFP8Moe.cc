@@ -8,7 +8,7 @@
 #include "rtp_llm/cpp/kernels/rocm/masked_silu_and_mul/mask_kernel.h"
 #include "rtp_llm/cpp/devices/myLogger.h"
 
-#include "csrc/ck_m_grouped_gemm/include/m_grouped_gemm.h"
+#include "deepgemm.h"
 #include "activation.h"
 
 // aiter kernels
@@ -131,7 +131,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
     // bf16 input
     if (params.qscheme == QScheme::NoQuantize) {
         // LOG_INFO("======= deepEpLLMoeFfn first gemm start ========");  
-        ::m_grouped_gemm(deep_ep_ll_output->packed_recv_x,
+        ::deepgemm(deep_ep_ll_output->packed_recv_x,
                         w1_tensor,
                         fc1_result_tensor,
                         deep_ep_ll_output->packed_recv_count,
@@ -150,7 +150,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
         // 3. second gemm
         // LOG_INFO("======= deepEpLLMoeFfn second gemm start ========");
         
-        ::m_grouped_gemm(fc1_activation_tensor,
+        ::deepgemm(fc1_activation_tensor,
                         w2_tensor,
                         output_tensor,
                         deep_ep_ll_output->packed_recv_count,
@@ -177,7 +177,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
         }
 
         //LOG_INFO("======= deepEpLLMoeFfn first gemm start ========");
-        ::m_grouped_gemm(hidden_tensor,                      // [30, 256, 4096]
+        ::deepgemm(hidden_tensor,                      // [30, 256, 4096]
                          w1_tensor,                          // [30, 2816, 4096]
                          fc1_result_tensor,                  // [30, 256, 2816]
                          deep_ep_ll_output->packed_recv_count,
@@ -230,7 +230,7 @@ FfnLayerOutput ROCmDevice::deepEpLLMoeFfn(const FfnLayerParams& params, const Mo
 
         //LOG_INFO("======= deepEpLLMoeFfn second gemm start ========");
         
-        ::m_grouped_gemm(fc1_act_tensor,
+        ::deepgemm(fc1_act_tensor,
                         w2_tensor,
                         output_tensor,
                         deep_ep_ll_output->packed_recv_count,
