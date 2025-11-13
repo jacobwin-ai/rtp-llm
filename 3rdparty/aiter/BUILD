@@ -110,6 +110,7 @@ genrule(
         cd external/aiter_src;
         export PYTHONPATH=$${PWD}:$${PYTHONPATH:-};
         find . -name lock_* | xargs rm -f;
+        cp -f /home/admin/qinhanwen/aiter_so_fix_car/*.so aiter/jit/;
         /opt/conda310/bin/python -m pip install -r requirements.txt -i https://artifacts.antgroup-inc.cn/simple/ --extra-index-url=https://artlab.alibaba-inc.com/1/PYPI/py-central/ --extra-index-url=https://artlab.alibaba-inc.com/1/PYPI/pytorch/ --extra-index-url=http://artlab.alibaba-inc.com/1/pypi/rtp_diffusion --trusted-host=artlab.alibaba-inc.com;
         /opt/conda310/bin/python -m pip install ninja -i https://artifacts.antgroup-inc.cn/simple/ --extra-index-url=https://artlab.alibaba-inc.com/1/PYPI/py-central/ --extra-index-url=https://artlab.alibaba-inc.com/1/PYPI/pytorch/ --extra-index-url=http://artlab.alibaba-inc.com/1/pypi/rtp_diffusion --trusted-host=artlab.alibaba-inc.com;
         /opt/conda310/bin/python -m pip install packaging -i https://artifacts.antgroup-inc.cn/simple/ --extra-index-url=https://artlab.alibaba-inc.com/1/PYPI/py-central/ --extra-index-url=https://artlab.alibaba-inc.com/1/PYPI/pytorch/ --extra-index-url=http://artlab.alibaba-inc.com/1/pypi/rtp_diffusion --trusted-host=artlab.alibaba-inc.com;
@@ -137,6 +138,30 @@ genrule(
     """,
     visibility = ["//visibility:public"],
     tags = ["rocm","local"],
+)
+
+# Library for py_itfs_common.h header
+cc_library(
+    name = "py_itfs_common_headers",
+    hdrs = ["csrc/include/py_itfs_common.h"],
+    strip_include_prefix = "csrc/include/",
+    visibility = ["//visibility:public"],
+    tags = ["rocm"],
+)
+
+cc_library(
+    name = "ck_deepgemm_example_headers",
+    hdrs = glob([
+        "3rdparty/composable_kernel/example/ck_tile/18_flatmm/*.hpp",
+    ]),
+    copts = rocm_default_copts() + ["-std=c++20"],
+    deps = [
+        ":ck_headers_real",
+        ":ck_library_headers",
+        ":py_itfs_common_headers",
+    ],
+    strip_include_prefix = "3rdparty/composable_kernel/example/ck_tile/18_flatmm",
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -336,13 +361,17 @@ cc_library(
  
 cc_library(
     name = "module_m_grouped_gemm",
-    srcs = ["aiter/jit/libmodule_m_grouped_gemm.so"],
-    hdrs = ["csrc/ck_m_grouped_gemm/include/m_grouped_gemm.h"],
-    deps = [":cpp_libraries"],
+    srcs = ["aiter/jit/module_deepgemm.so"],
+    hdrs = ["csrc/ck_deepgemm/include/deepgemm.h"],
+    deps = [
+        ":aiter_so",
+        ":aiter_headers",
+        ":ck_deepgemm_example_headers"
+    ],
     copts = [],
-    linkopts = [],
+    strip_include_prefix = "csrc/ck_deepgemm/include",
     visibility = ["//visibility:public"],
-    tags = ["rocm","local"],
+    tags = ["rocm"],
 )
 
 cc_library(
