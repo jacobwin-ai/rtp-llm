@@ -7,7 +7,6 @@
 #include "rtp_llm/cpp/core/BufferHelper.h"
 #include "rtp_llm/cpp/kernels/activation_kernels.h"
 #include "rtp_llm/cpp/core/Dispatch.h"
-#include "rtp_llm/cpp/devices/myLogger.h"
 
 #include "quant.h"
 
@@ -18,10 +17,6 @@ namespace rtp_llm {
 #ifdef ENABLE_DEEP_EP
 
 MoeDispatchOutput ROCmDevice::deepEpLLDispatch(const MoeDispatchParams& params) {
-    // RTP_LLM_LOG_INFO("========= enter deepEpLLDispatch =========");
-    // std::cout << "========= enter deepEpLLDispatch =========" << std::endl;
-    // LOG_INFO("========= enter deepEpLLDispatch ==========");
-
     const auto& moe_conf   = params.moe_configs;
     auto const  tp_size    = moe_conf.tp_size;
     auto const  expert_num = moe_conf.expert_num + moe_conf.extra_expert_num;
@@ -61,7 +56,6 @@ MoeDispatchOutput ROCmDevice::deepEpLLDispatch(const MoeDispatchParams& params) 
         );
 
         BufferPtr packed_recv_x_buffer = torchTensor2Buffer(dispatch_output.packed_recv_x);
-        // printMyBufferData_(*packed_recv_x_buffer, "packed_recv_x_buffer", true);
 
         auto expert_stats = params.expert_stats;
         auto ep_rank = moe_conf.ep_rank;
@@ -90,9 +84,6 @@ MoeDispatchOutput ROCmDevice::deepEpLLDispatch(const MoeDispatchParams& params) 
         } else {
             stats_func();
         }
-        // RTP_LLM_LOG_INFO("========= deepEpLLDispatch exit =========");
-        // std::cout << "deepEpLLDispatch exit" << std::endl;
-        // LOG_INFO("========= deepEpLLDispatch exit ==========");
         return out;
     } catch (const std::exception& e) {
         RTP_LLM_LOG_ERROR("DeepEP ll dispatch failed: %s", e.what());
@@ -102,8 +93,7 @@ MoeDispatchOutput ROCmDevice::deepEpLLDispatch(const MoeDispatchParams& params) 
     }
 }
 
-MoeCombineOutput ROCmDevice::deepEpLLCombine(const MoeCombineParams& params) {
-    // LOG_INFO("========= enter deepEpLLCombine ==========");   
+MoeCombineOutput ROCmDevice::deepEpLLCombine(const MoeCombineParams& params) {  
     RTP_LLM_CHECK(params.deep_ep_ll_output != nullptr);
 
     auto& expert_ids    = params.expert_ids;
@@ -136,7 +126,6 @@ MoeCombineOutput ROCmDevice::deepEpLLCombine(const MoeCombineParams& params) {
         comm_hook = std::make_unique<DeepEPRecvHook>(
             combine_output.hook.value(), std::move(empty_func), std::vector<BufferPtr>(), std::vector<torch::Tensor>());
     }
-    // LOG_INFO("========= deepEpLLCombine exit ==========");
     return MoeCombineOutput({all_output, all_output, params, move(comm_hook)});
 }
 

@@ -7,7 +7,6 @@
 #include "rtp_llm/cpp/core/BufferHelper.h"
 #include "rtp_llm/cpp/kernels/activation_kernels.h"
 #include "rtp_llm/cpp/core/Dispatch.h"
-#include "rtp_llm/cpp/devices/myLogger.h"
 
 #include "quant.h"
 
@@ -23,13 +22,6 @@ bool ROCmDevice::initDeepEPBuffer() {
     size_t world_size  = nccl_param.world_size_;
     int    num_experts = init_params_.num_experts + init_params_.extra_experts;
 
-    // LOG_INFO("======= world_rank: ", world_rank, ", world_size: ", world_size,
-    //     ", num_experts:", num_experts);
-    // LOG_INFO("========= init_params_.use_deepep_moe: ",
-    //     init_params_.use_deepep_moe, " init_params_.use_deepep_low_latency: ",
-    //     init_params_.use_deepep_low_latency, " init_params_.use_deepep_internode:",
-    //     init_params_.use_deepep_internode);
-
     // TODO: check if get right
     ll_num_max_token_per_rank =
         (init_params_.max_generate_batch_size + init_params_.tp_size - 1) / init_params_.tp_size;
@@ -39,9 +31,6 @@ bool ROCmDevice::initDeepEPBuffer() {
         num_rdma_bytes = DeepEPBuffer::getLowLatencyRdmaSizeHint(
             ll_num_max_token_per_rank, init_params_.hidden_size, world_size, num_experts);
         num_qps_per_rank = num_experts / init_params_.ep_size;
-        // LOG_INFO("======= ll_num_max_token_per_rank: ", ll_num_max_token_per_rank, ", hidden_size: ",
-        // init_params_.hidden_size,
-        //  ", num_qps_per_rank:", num_qps_per_rank);
     } else if (init_params_.use_deepep_internode) {  // normal-kernel internode
         num_rdma_bytes   = int(1e9);
         num_qps_per_rank = std::max(12, (int)(num_experts / init_params_.ep_size));
@@ -57,7 +46,6 @@ bool ROCmDevice::initDeepEPBuffer() {
                          world_size);
 #if USE_ACCL_EP
         num_qps_per_rank = num_experts / init_params_.ep_size;
-        // LOG_INFO("======== use accl ep");
         deepep_buffer_.reset(new DeepEPBuffer(this,
                                               world_rank,
                                               world_size,
@@ -66,7 +54,6 @@ bool ROCmDevice::initDeepEPBuffer() {
                                               init_params_.use_deepep_low_latency,
                                               num_qps_per_rank));
 #else
-        // LOG_INFO("======== no use accl ep");
         int64_t num_nvl_bytes = init_params_.use_deepep_low_latency ? 0 : 1e9;
         deepep_buffer_.reset(new DeepEPBuffer(this,
                                               world_rank,
@@ -77,7 +64,6 @@ bool ROCmDevice::initDeepEPBuffer() {
                                               num_qps_per_rank));
 #endif
         bool success = deepep_buffer_->init();
-        // LOG_INFO("!!!!!!!!!! deepep buffer init success: ", success);
         if (!success) {
             RTP_LLM_LOG_ERROR("Failed to initialize DeepEPBuffer");
             return false;
@@ -166,8 +152,7 @@ MoeDispatchOutput ROCmDevice::deepEpDispatch(const MoeDispatchParams& params) {
         x = Buffer2torchTensorWithDstType(
             hidden, false, dataTypeToTorchType(hidden->type()));  // [num_tokens, hidden_size]
     }
-    // printMyBufferData_(*hidden_quant, "hidden_quant", false);
-    // printMyBufferData_(*hidden_quant_scale, "hidden_quant_scale", false);
+
 
     const auto dispatch_begin_event = deepep_buffer_->capture();
 
@@ -277,7 +262,6 @@ MoeCombineOutput ROCmDevice::deepEpCombine(const MoeCombineParams& params) {
     auto& dispatch_output = params.deep_ep_output;
 
     auto compute_event = deepep_buffer_->capture();
-    // LOG_INFO("======== deepep buffer combine start ========");
     auto combine_output = deepep_buffer_->combine(input_tensor,
                                                   dispatch_output->handle.value(),
                                                   dispatch_output->recv_topk_weights,
@@ -291,7 +275,6 @@ MoeCombineOutput ROCmDevice::deepEpCombine(const MoeCombineParams& params) {
     BufferPtr  all_output;
     const auto output_type   = params.output ? params.output->type() : params.input->type();
     const auto combined_type = torchDTypeToDataType(combine_output.recv_x.dtype());
-    // LOG_INFO("======== deepep buffer combine finish ========");
 
     DeviceHookPtr comm_hook;
 
@@ -324,7 +307,6 @@ MoeCombineOutput ROCmDevice::deepEpCombine(const MoeCombineParams& params) {
     }
 
     all_output = torchTensor2BufferWithDstType(combine_output.recv_x, dataTypeToTorchType(output_type));
-    // printMyBufferData_(*all_output, "all_output", false);
     printBufferData(*all_output, "all_output");
     return MoeCombineOutput({all_output, all_output, params, move(comm_hook)});
 }

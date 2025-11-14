@@ -1,7 +1,6 @@
 #include "rtp_llm/cpp/devices/rocm_impl/DeepEPBuffer.h"
 #include "rtp_llm/cpp/core/BufferHelper.h"
 #include "rtp_llm/cpp/devices/utils/DebugUtils.h"
-#include "rtp_llm/cpp/devices/myLogger.h"
 
 using namespace std;
 
@@ -11,12 +10,6 @@ namespace rtp_llm {
  * @brief Initialize the communication buffer.
  */
 bool DeepEPBuffer::init() {
-    // LOG_INFO("Initializing DeepEPBuffer");
-    // LOG_INFO("World rank: ", world_rank_, ", World size: ", world_size_,
-    //     "num_nvl_bytes: ", num_nvl_bytes_, ",num_rdma_bytes: ", num_rdma_bytes_,
-    //     ",low_latency_mode: ", low_latency_mode_, ",num_qps_per_rank: ", num_qps_per_rank_);
-    // buffer_.reset(new deep_ep::Buffer(world_rank_, world_size_, num_nvl_bytes_, num_rdma_bytes_, low_latency_mode_));
-
     try {
         buffer_ = std::make_unique<deep_ep::Buffer>(
             world_rank_, world_size_, num_nvl_bytes_, num_rdma_bytes_, low_latency_mode_);
@@ -32,14 +25,12 @@ bool DeepEPBuffer::init() {
     }
 
     int local_device_id = buffer_->get_local_device_id();
-    // LOG_INFO("=======local_device_id :", local_device_id);
     std::vector<int> device_ids = allGatherDeviceIds(local_device_id);
 
     std::string              local_ipc_handle = buffer_->get_local_ipc_handle_string();
     std::vector<std::string> ipc_handles      = allGatherIpcHandles(local_ipc_handle);
 
     std::string root_unique_id;
-    // LOG_INFO("=======local_ipc_handle :", local_ipc_handle);
     if (buffer_->get_num_rdma_ranks() > 1 || low_latency_mode_) {
         // low latency set env
 #if USE_ACCL_EP
@@ -47,16 +38,12 @@ bool DeepEPBuffer::init() {
             setLowLatencyEnv();
         }
 #else
-        // LOG_INFO("======= set low latency env");
         setLowLatencyEnv();
 #endif
 
         root_unique_id = getRootUniqueId();
     }
-    // LOG_INFO("=======root_unique_id :", root_unique_id);
-    // LOG_INFO("=======start sync_string");
     buffer_->sync_string(device_ids, ipc_handles, root_unique_id);
-    // LOG_INFO("=======sync_string success");
     // #if USE_ACCL_EP
     if (buffer_->is_low_latency_optimize()) {
         RTP_LLM_LOG_INFO("aclcep low latency optimized, start get pxn handle");

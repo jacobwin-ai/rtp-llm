@@ -5,7 +5,6 @@
 #include "rtp_llm/cpp/core/torch_utils/BufferTorchUtils.h"
 #include "rtp_llm/cpp/devices/utils/DevicePerfWrapper.h"
 #include "rtp_llm/cpp/kernels/moe_kernels.h"
-#include "rtp_llm/cpp/devices/myLogger.h"
 
 
 // aiter kernels
@@ -25,10 +24,8 @@ MoeDispatchOutput ROCmDevice::epDispatch(const MoeDispatchParams& params) {
     // std::cout << "use_deepep_low_latency: " << init_params_.use_deepep_low_latency << std::endl;
     if (init_params_.use_deepep_moe) {
         if (init_params_.use_deepep_low_latency) {
-            // LOG_INFO("======= deepEpLLDispatch ========");
             return deepEpLLDispatch(params);
         } else {
-            // LOG_INFO("======= deepEpDispatch ========");
             return deepEpDispatch(params);
         }
     }
@@ -254,11 +251,9 @@ FfnLayerOutput ROCmDevice::gatherCombineOutput(const MoeCombineOutput& combine_o
 }
 
 MoeGateSelectOutput ROCmDevice::moeGateSelect(const FfnLayerParams& params) {
-    // LOG_INFO("========= ROCmDevice::moeGateSelect");
     const MoeConfigs& moe_conf = params.configs.moe_configs.value();
 
     const Buffer& hidden     = params.input;
-    // printMyBufferData_(hidden, "moeGateSelect::hidden", true);
     const size_t  num_token  = hidden.shape()[0];
     const size_t  model_dim  = hidden.shape()[1];
     const size_t  num_expert = moe_conf.expert_num;
@@ -340,79 +335,9 @@ MoeGateSelectOutput ROCmDevice::moeGateSelect(const FfnLayerParams& params) {
                                 stream_);
         }
     }
-    // printMyBufferData_(*topk_ids, "topk_ids", true);
-    // printMyBufferData_(*topk_weights, "topk_weights", true);
     return {topk_ids, topk_weights, moe_gating};
 }
 
-/*
-MoeGateSelectOutput ROCmDevice::moeGateSelect(const FfnLayerParams& params) {
-    const MoeConfigs& moe_conf = params.configs.moe_configs.value();
-
-    const Buffer& hidden = params.input;
-    const size_t num_token = hidden.shape()[0];
-    const size_t model_dim = hidden.shape()[1];
-    const size_t num_expert = moe_conf.expert_num;
-    const size_t topk = moe_conf.top_k;
-    const int n_group = moe_conf.n_group;
-    const int topk_group = moe_conf.topk_group;
-    const bool has_moe_norm = moe_conf.has_moe_norm; // FIXME(liyangcheng.lyc): normalize_expert_scale? has_moe_norm?
-    // step 1. calculate gating logits
-    BufferPtr logits = allocateBuffer({DataType::TYPE_FP32, {num_token, num_expert}}, {"rocm_logits"});
-    // printMyBufferData_(*logits, "before_logits", false);
-    // printMyBufferData_(hidden, "hidden", true);
-    // printMyBufferData_(*(params.weights.moe_gating_weight->kernel), "moe_gating_weight", true);
-    // LOG_INFO("??????? stuck before gemm ????????");
-    gemm({hidden, *(params.weights.moe_gating_weight->kernel), nullopt, logits, DataType::TYPE_FP32});
-    // LOG_INFO("!!!!!!! gemm success!!!!!!!");
-    // printMyBufferData_(*logits, "logits", true);
-
-    // step 2. calculate topk function to get topk_ids and topk_weights
-    torch::Tensor logits_tensor = Buffer2torchTensor(*logits, false);
-
-    BufferPtr topk_weights = allocateBuffer({DataType::TYPE_FP32, {num_token, topk}}, {"rocm_topk_weights"});
-    BufferPtr topk_ids = allocateBuffer({DataType::TYPE_INT32, {num_token, topk}}, {"rocm_topk_ids"});
-    torch::Tensor topk_weights_tensor = Buffer2torchTensor(*topk_weights, false);
-    torch::Tensor topk_ids_tensor = Buffer2torchTensor(*topk_ids, false);
-
-    // use grouped topk
-    if (n_group > 1) {
-        // use biased_grouped_topk, in aiter will invoke function `biased_grouped_topk`
-        // act must be `sigmoid` when using bias
-        if (params.weights.e_score_correction_bias) {
-            torch::Tensor e_score_correction_bias_tensor = Buffer2torchTensor(*(params.weights.e_score_correction_bias), false).to(torch::kFloat32);
-
-            // invoke aiter kernel
-            biased_grouped_topk(
-                logits_tensor,
-                e_score_correction_bias_tensor,
-                topk_weights_tensor,
-                topk_ids_tensor,
-                n_group,
-                topk_group,
-                has_moe_norm); // FIXME(liyangcheng.lyc): not set routed_scaling_factor, no such config now
-        } else { // use grouped_topk, in aiter will invoke function `grouped_topk`
-            // FIXME(liyangcheng.lyc): not implemented yet
-            RTP_LLM_FAIL("[ROCm moeGateSelect]: n_group > 1 and e_score_correction_bias is null not implemented yet");
-        }
-    } else { // use normal topk softmax, in aiter will invoke function `topk_softmax`
-        // NOTE(liyangcheng.lyc): this buffer not used, but maybe used in the future
-        BufferPtr token_expert_indicies = allocateBuffer({DataType::TYPE_INT32, {num_token, topk}}, {"rocm_token_expert_indicies"});
-        torch::Tensor token_expert_indicies_tensor = Buffer2torchTensor(*token_expert_indicies, false);
-        // invoke aiter kernel
-        aiter::topk_softmax(
-            topk_weights_tensor,
-            topk_ids_tensor,
-            token_expert_indicies_tensor,
-            logits_tensor,
-            has_moe_norm);
-    }
-    // printMyBufferData_(*topk_ids, "topk_ids", false);
-    // printMyBufferData_(*topk_weights, "topk_weights", false);
-
-    return {topk_ids, topk_weights};
-}
-*/
 FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSelectOutput& gate_outputs) {
     // deepseek deepep low latency only
     if (init_params_.ep_size > 1 && init_params_.use_deepep_moe && init_params_.use_deepep_low_latency) {
@@ -434,8 +359,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
     } else {
         dtype = DataType::TYPE_BF16;
     }
-    // LOG_INFO("dtype is :" , static_cast<int>(dtype));
-    // LOG_INFO("======= 1111111111111 ========");
     BufferPtr moe_out_final = allocateBuffer({dtype, {num_token, model_dim}}, {"rocm_moe_final_out"});
     if (num_token == 0) {
         return {moe_out_final};
@@ -461,7 +384,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
         hidden_tensor       = Buffer2torchTensor(q_hidden->kernel(), false);
         hidden_scale_tensor = Buffer2torchTensor(q_hidden->scales(), false);
     }
-    // LOG_INFO("======= 222222222222 ========");
 
     // get w1 and w2
     torch::Tensor                w1_tensor, w2_tensor;
@@ -522,7 +444,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
             }
         }
     }
-    // LOG_INFO("======= 333333333 ========");
 
     const int max_num_token_padded = topk_ids_tensor.numel() + num_expert * unit_size - topk;
     const int max_num_m_block      = (max_num_token_padded + unit_size - 1) / unit_size;
@@ -541,7 +462,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
     torch::Tensor num_valid_ids_tensor     = Buffer2torchTensor(*num_valid_ids, false);
 
     torch::Tensor moe_out_tensor = Buffer2torchTensor(*moe_out_final, false);
-    // LOG_INFO("======= 444444444 ========");
 
     // invoke aiter moe_sorting kernel
     moe_sorting_fwd(
@@ -557,7 +477,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
         /*local_expert_mask=*/local_expert_mask_tensor,
         /*num_local_tokens*/ std::nullopt,
         /*dispatch_policy*/ 0);
-    // LOG_INFO("======= 44444444455555 ========");
     if (params.qscheme == QScheme::Qfp8PerTokenBlock) {
         RTP_LLM_CHECK_WITH_INFO(dtype == DataType::TYPE_BF16,
                                 "input hidden datatype should be bf16 when using Qfp8PerTokenBlock");
@@ -567,7 +486,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
         w1_scale_tensor                            = w1_scale_tensor.value().view({(int)num_expert_per_rank, -1});
         w2_scale_tensor                            = w2_scale_tensor.value().view({(int)num_expert_per_rank, -1});
         std::string fmoe_fp8_block_scale_g1u1_name = "";
-        // LOG_INFO("======= 5555555555 ========");
         // invoke aiter moe kernel
         fmoe_fp8_blockscale_g1u1(
             /*out=*/moe_out_tensor,
@@ -598,7 +516,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
         std::string                  ck_moe_stage1_kernel_name  = "";
         std::string                  asm_moe_stage1_kernel_name = "";
         std::string                  ck_moe_stage2_kernel_name  = "";
-        // LOG_INFO("======= 6666666666 ========");
 
         auto aiterQscheme = [qscheme = params.qscheme]() {
             switch (qscheme) {
@@ -630,7 +547,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
                 /*quant_type*/ static_cast<int>(aiterQscheme),
                 /*activation*/ static_cast<int>(::ActivationType::Silu));
         } else {
-            // LOG_INFO("======= 666666666 ========");
             moe_stage1_g1u1(
                 /*input*/ hidden_tensor,
                 /*w1*/ w1_tensor,
@@ -656,7 +572,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
             a2_tensor       = Buffer2torchTensor(a2_q->kernel(), false).view({(int)num_token, (int)topk, inter_dim});
             a2_scale_tensor = Buffer2torchTensor(a2_q->scales(), false);
         }
-        // LOG_INFO("======= 888888888 ========");
         ck_moe_stage2(
             /*inter_states*/ a2_tensor,
             /*w1*/ w1_tensor,
@@ -674,8 +589,6 @@ FfnLayerOutput ROCmDevice::moeFfn(const FfnLayerParams& params, const MoeGateSel
             /*quant_type*/ static_cast<int>(aiterQscheme),
             /*activation*/ static_cast<int>(::ActivationType::Silu));
     }
-    // LOG_INFO("======= rocmffn execute success ========");
-    // printMyBufferData_(*moe_out_final, "moe_out_final", true);
     return {moe_out_final};
 }
 

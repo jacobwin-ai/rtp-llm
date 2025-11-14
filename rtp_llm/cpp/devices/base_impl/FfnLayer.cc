@@ -4,7 +4,6 @@
 #include "rtp_llm/cpp/core/BufferHelper.h"
 #include "rtp_llm/cpp/devices/utils/DevicePerfWrapper.h"
 #include "rtp_llm/cpp/core/torch_utils/BufferTorchUtils.h"
-#include "rtp_llm/cpp/devices/myLogger.h"
 #include <cstddef>
 #include <numeric>
 #include <optional>
@@ -230,7 +229,6 @@ FfnLayerOutput DeviceBase::ffnLayer(const FfnLayerParams& params) {
 FfnLayerOutput DeviceBase::epMoeFfnLayer(const FfnLayerParams& params, const MoeGateSelectOutput& gate_output) {
     RUNTIME_ASSERT_OP_ARG(params.configs.moe_configs, "moe configs not set");
     const auto&       moe_conf          = params.configs.moe_configs.value();
-    // LOG_INFO("========= start epdispatch ==========");
     MoeDispatchOutput dispatched_output = epDispatch({params.input,
                                                       *gate_output.expert_ids,
                                                       *gate_output.expert_scales,
@@ -242,14 +240,12 @@ FfnLayerOutput DeviceBase::epMoeFfnLayer(const FfnLayerParams& params, const Moe
     auto              moe_ffn_params =
         FfnLayerParams({*hidden_states, params.configs, params.weights, params.residual, params.qscheme});
     moe_ffn_params.expert_stats = params.expert_stats;
-    // LOG_INFO("========= start epmoeffn ==========");
     hidden_states               = moeFfn(moe_ffn_params,
                                          {dispatched_output.expert_ids,
                                           dispatched_output.expert_scales,
                                           nullptr,
                                           dispatched_output.deep_ep_ll_output})
-                        .hidden_states;
-    // LOG_INFO("========= start epCombine ==========");  
+                        .hidden_states; 
     auto combine_out = epCombine({hidden_states,
                                   dispatched_output.indices,
                                   params.output,
@@ -262,8 +258,7 @@ FfnLayerOutput DeviceBase::epMoeFfnLayer(const FfnLayerParams& params, const Moe
                                   dispatched_output.deep_ep_ll_output,
                                   std::make_shared<MoeGateSelectOutput>(gate_output),
                                   dispatched_output.expert_ids,
-                                  dispatched_output.expert_scales});
-    // LOG_INFO("========= epCombine success==========");                  
+                                  dispatched_output.expert_scales});                
     // TODO(wangyin.yx): refact this defered combine.
     if (combine_out.comm_barrier_hook) {
         return {combine_out.all_output, nullptr, combine_out.comm_barrier_hook, combine_out};
@@ -276,7 +271,6 @@ FfnLayerOutput DeviceBase::epMoeFfnLayer(const FfnLayerParams& params, const Moe
 
 FfnLayerOutput DeviceBase::moeFfnLayer(const FfnLayerParams& params) {
     RUNTIME_ASSERT_OP_ARG(params.configs.moe_configs, "moe configs not set");
-    // LOG_INFO("========= enter moeFfnLayer ==========");
     const auto&         moe_conf    = params.configs.moe_configs.value();
     MoeGateSelectOutput gate_output = moeGateSelect(params);
     FfnLayerOutput      output;

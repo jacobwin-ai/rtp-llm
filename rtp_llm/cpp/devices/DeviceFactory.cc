@@ -1,6 +1,5 @@
 #include "rtp_llm/cpp/devices/DeviceFactory.h"
 #include "rtp_llm/cpp/config/ConfigModules.h"
-#include "rtp_llm/cpp/devices/myLogger.h"
 #include "autil/EnvUtil.h"
 #include <cassert>
 
